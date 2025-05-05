@@ -1,0 +1,28 @@
+---
+title: "Shiny: In Class"
+runtime: shiny
+editor_options: 
+  chunk_output_type: console
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    theme: 
+      version: 4
+      bootswatch: simplex
+---
+
+Grum
+==========================
+ergonomics
+
+Crum
+==========================
+ergo
+
+Slum
+==========================
+ergecentrics
+
+Bum
+==========================
+entreaty
