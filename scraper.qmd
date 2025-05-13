@@ -7,6 +7,15 @@ editor_options:
   chunk_output_type: console
 ---
 
+```{r}
+library(httr2)
+library(stringr)
+library(jsonlite)
+library(tidyverse)
+key <- readLines("api_token")
+```
+
+
 # Scraping
 
 ```{r}
@@ -110,7 +119,7 @@ drugs <- tibble(
 )
 
 library(lubridate)
-start <- ymd("2015-01-01")
+start <- ymd("2019-01-01")
 d <- start
 a <- 0
 end <- ymd("2020-01-01")
@@ -121,7 +130,7 @@ while (d<end-15) {
   drugs <- rbind(drugs, get_fda_data(date1, date2))
   d <- d + 15
   a <- a + 15
-  print(str_c(a/(5*364), " done"))
+  print(str_c(a/(10*364), " done"))
 }
 
 # Write the csv file
@@ -162,7 +171,12 @@ drugs_typed <- drugs_raw |>
       levels = c("1","2"),
       labels = c("Serious","Not Serious")
     ),
-    death = ifelse(drug==1, 1, 0)
+    onset_age = ifelse(
+      onset_age > 125,
+      floor(onset_age/324),
+      onset_age
+    ),
+    death = ifelse(is.na(death), "Not Dead", ifelse(death=="0" | death==0, "Not Dead", "Dead"))
     
   )
 
