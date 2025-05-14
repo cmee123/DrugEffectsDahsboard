@@ -1,5 +1,5 @@
 ---
-title: "Final Project"
+title: "Adverse Drug Effects"
 runtime: shiny
 editor_options: 
   chunk_output_type: console
@@ -14,6 +14,7 @@ output:
 ```{r}
 library(tidyverse)
 library(ggrepel)
+library(wordcloud2)
 drugs <- read.csv("drugs.csv")
 reports <- read.csv("reports.csv") |>
   mutate(
@@ -28,13 +29,72 @@ reports <- read.csv("reports.csv") |>
   border-radius: 5px;
   overflow-x: hidden;
   overflow-y: hidden;
+  margin-bottom: 5vh;
 }
 
 </style>
 
 About
 ==========================
-ergonomics
+
+### Adverse Drug Effects
+Cathal Mee, Daniel Evans
+
+
+Row
+---------------------------
+
+### The Dataset
+All of the data we used in this project was scraped from the FDA's public API; specifically, we used the adverse drug effects endpoint, which gives access to information about individual effect reports made by a variety of sources. In our initial collection of data, we separated each report into the various drugs that were included. Afterwards, we wrangled another dataset of reports, without individual drug information. After all this, we had access to the following variables.
+
+```{r}
+library(knitr)
+fields <- data.frame(
+  Name = c(
+    "Date", "Reporter Qualifications", "Patient Onset Age", "Patient Sex",
+    "Patient Weight", "Patient Reaction", "Reporter Qualification", "Country",
+    "Drug Start Date", "Receive Date", "Time to Report", "Seriousness",
+    "Death date", "Death"
+  ),
+  Type = c(
+    "Numerical", "Categorical", "Numerical", "Categorical",
+    "Numerical", "Text", "Categorical", "Categorical",
+    "Date", "Date", "Numerical", "Categorical",
+    "Date", "Boolean"
+  ),
+  Description = c(
+    "The date that the report was submitted.",
+    "What entity made a report on behalf of a patient.",
+    "The age of the patient when the first effect occurred.",
+    "The sex of the patient.",
+    "The weight of the patient.",
+    "Text data that includes all reactions experienced by the patient.",
+    "The type of reporter; 1 = Physician, 2 = Pharmacist, 3 = Other health professional, 4 = Lawyer, 5 = Consumer or non-health professional.",
+    "The name of the country where the event occurred.",
+    "The date the patient began taking the drug.",
+    "The date the report was received.",
+    "To be calculated manually: the amount of time in between the drug start date and the date the report was received.",
+    "Whether or not the report was considered serious.",
+    "The date of death, if the patient died.",
+    "Whether or not the patient died."
+  )
+)
+
+kable(fields, format = "markdown", col.names = c("Name", "Type", "Description"))
+```
+
+
+
+### Objectives
+Given the interactive nature of this dashboard, our aim is not to answer any single question about adverse drug effects in the United States; rather, we hope that these illustrations will allow for true exploration of trends in the data. There are four primary contexts to this data that we wanted users to be able to explore: reports, reporters, reactions, and locations. 
+
+[Reports]
+
+Given that the United States pharmaceutical industry is driven by capital, health care victims are often taken advantage of by big companies. These reports are one of the few ways that the producers of medications can be held accountable; thus, we thought it relevant to analyze the sources of these reports, to see how problems in the system are identified. Questions include what qualifications do the people making these reports have, whether or not sex or seriousness play a factor in how effects get reported, and how these trends may differ across time.
+
+Of course, the foci of the data are the effects themselves. We wanted to observe the quantities of each effect, as well as how these reactions are distributed across demographics and seriousness. Since the effects are numerous, we also wanted to create a visualization that captures a big-picture view of the situation.
+
+[Locations]
 
 Reports
 ==========================
@@ -154,6 +214,16 @@ reactions <- reports |>
     unnest(effects) |>
     rename(effect = effects) |>
     mutate(effect = str_to_upper(effect))
+
+drugs200 <- drugs |> 
+  mutate(drug = str_remove(drug, "\\.")) |>
+  group_by(drug) |>
+  summarize(n = n()) |>
+  arrange(desc(n)) |>
+  slice_head(n = 200)
+
+drugnames <- str_to_upper(drugs200$drug)
+  
 ```
 
 ```{r}
@@ -236,6 +306,85 @@ renderPlot({
           y = "Count"
         ) +
         theme_minimal()
+  }
+})
+```
+
+Row
+-----------------------
+
+```{r}
+inputPanel(
+  selectizeInput(
+      "drugs", 
+      "Add drug:", 
+      choices = sort(unique(drugnames)), 
+      multiple = TRUE,
+      options = list(create = TRUE)
+  ),
+  selectInput("limit", label = "Limit to:", choices = c(
+      "No Limit" = "None",
+      "Male" = "Male",
+      "Female" = "Female",
+      "Serious" = "Serious",
+      "Deaths" = "Dead"
+    )),
+  sliderInput(
+      "wcagerange", 
+      label = "Ages:",
+      min = 0, 
+      max = 120, 
+      value = c(0, 120), 
+      step = 1
+  )
+)
+```
+
+```{r}
+renderWordcloud2({
+  req(input$drugs)
+  req(input$limit)
+  req(input$wcagerange)
+  if (length(input$drugs)==0) {
+    reactions |>
+      filter(
+        onset_age > input$wcagerange[1] & 
+        onset_age < input$wcagerange[2] & 
+        (input$limit == sex | 
+        input$limit == seriousness |
+        input$limit == death |
+        input$limit == "None")
+      ) |>
+      group_by(effect) |>
+      summarize(freq = n()) |>
+      arrange(desc(freq)) |>
+      slice_head(n = 200) |>
+      wordcloud2(shape = "circle")
+  } else {
+    search <- str_c(input$drugs, collapse = "|")
+    
+    drugs |>
+      # filter and unnest reactions
+      filter(str_detect(drug, search)) |>
+      mutate(effects = str_split(effects, ";")) |>
+      unnest(effects) |>
+      rename(effect = effects) |>
+      mutate(effect = str_to_upper(effect)) |>
+      # filter
+      filter(
+        onset_age > input$wcagerange[1] & 
+        onset_age < input$wcagerange[2] & 
+        (input$limit == sex | 
+        input$limit == seriousness |
+        input$limit == death |
+        input$limit == "None")
+      ) |>
+      # wordcloud
+      group_by(effect) |>
+      summarize(freq = n()) |>
+      arrange(desc(freq)) |>
+      slice_head(n = 200) |>
+      wordcloud2(shape = "circle")
   }
 })
 ```
