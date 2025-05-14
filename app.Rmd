@@ -203,10 +203,10 @@ renderPlot({
 ```
 
 
-Reactions
+Reactions - Bar Chart
 ==========================
 
-Inputs {.sidebar}
+Page 1: Inputs {.sidebar}
 -------------------------
 ```{r, include=FALSE}
 reactions <- reports |>
@@ -310,9 +310,11 @@ renderPlot({
 })
 ```
 
-Row
------------------------
+Reactions - Wordcloud
+==========================
 
+Page 1: Inputs {.sidebar}
+-------------------------
 ```{r}
 inputPanel(
   selectizeInput(
@@ -322,7 +324,7 @@ inputPanel(
       multiple = TRUE,
       options = list(create = TRUE)
   ),
-  selectInput("limit", label = "Limit to:", choices = c(
+  selectInput("wc_filter", label = "Limit to:", choices = c(
       "No Limit" = "None",
       "Male" = "Male",
       "Female" = "Female",
@@ -330,7 +332,7 @@ inputPanel(
       "Deaths" = "Dead"
     )),
   sliderInput(
-      "wcagerange", 
+      "wc_agerange", 
       label = "Ages:",
       min = 0, 
       max = 120, 
@@ -340,20 +342,20 @@ inputPanel(
 )
 ```
 
+Row
+--------------------------
 ```{r}
 renderWordcloud2({
-  req(input$drugs)
-  req(input$limit)
-  req(input$wcagerange)
+  
   if (length(input$drugs)==0) {
     reactions |>
       filter(
-        onset_age > input$wcagerange[1] & 
-        onset_age < input$wcagerange[2] & 
-        (input$limit == sex | 
-        input$limit == seriousness |
-        input$limit == death |
-        input$limit == "None")
+        onset_age > input$wc_agerange[1] & 
+        onset_age < input$wc_agerange[2] & 
+        (input$wc_filter == sex | 
+        input$wc_filter == seriousness |
+        input$wc_filter == death |
+        input$wc_filter == "None")
       ) |>
       group_by(effect) |>
       summarize(freq = n()) |>
@@ -372,16 +374,17 @@ renderWordcloud2({
       mutate(effect = str_to_upper(effect)) |>
       # filter
       filter(
-        onset_age > input$wcagerange[1] & 
-        onset_age < input$wcagerange[2] & 
-        (input$limit == sex | 
-        input$limit == seriousness |
-        input$limit == death |
-        input$limit == "None")
+        onset_age > input$wc_agerange[1] & 
+        onset_age < input$wc_agerange[2] & 
+        (input$wc_filter == sex | 
+        input$wc_filter == seriousness |
+        input$wc_filter == death |
+        input$wc_filter == "None")
       ) |>
       # wordcloud
+      mutate(tot = n()) |>
       group_by(effect) |>
-      summarize(freq = n()) |>
+      summarize(freq = 10*n()/tot) |>
       arrange(desc(freq)) |>
       slice_head(n = 200) |>
       wordcloud2(shape = "circle")
