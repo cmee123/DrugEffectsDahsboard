@@ -34,14 +34,127 @@ reports <- read.csv("reports.csv") |>
 
 About
 ==========================
-ergonomics
+We chose to scrape data from the openFDA API. This API serves public data from the Food and Drug Administration about drugs, devices, and foods. It only has publicly available data, so there are no sensitive personal details. Each entry in this data set has tons of details about a singular drug event, such as the drug name, basic patient descriptors (age, gender, etc), list of adverse side effects experienced, and severity measures. We plan to scrape as many reports as possible using queries to the API, and compile a dataset of all observations over the last 10 years.
 
 Reports
 ==========================
+
+Inputs {.sidebar}
+-------------------------
+```{r, echo=FALSE}
+inputPanel(
+  div(
+    selectInput("x_axis", label = "Numerical Variable:", choices = c(
+      "Date" = "receive_date",
+      "Age" = "onset_age"
+    )),
+    selectInput("cat_axis", label = "Categorical Variable:", choices = c(
+      "Sex" = "sex",
+      "Country" = "country",
+      "Seriousness" = "seriousness"
+    )),
+    style = "display: flex; flex-direction: column;"
+  )
+)
+```
+
+Row
+-------------------------------------
 ```{r}
+
+renderPlot({
+  
+  if (input$x_axis == "onset_age") {
+     reports |> 
+      filter(onset_age <= 110) |> 
+      ggplot(aes(x=onset_age)) +
+      geom_density(fill="#69b3a2", color="#69b3a2", alpha=0.3) +
+      labs(title = "Distribution of Reports Based on Age", y="Density", x="age")
+  }
+  else {
+     
+  reports |> 
+    mutate(receive_date = ymd(receive_date)) |> 
+    group_by(.data[[input$x_axis]]) |> 
+    count(.data[[input$x_axis]]) |> 
+    ggplot(aes(x=.data[[input$x_axis]])) +
+    geom_density(fill="#69b3a2", color="#69b3a2", alpha=0.3) +
+    labs(title = "Density of Reports Based on Date", y="Density", x=ifelse(input$x_axis == "onset_age", "Age", "Date"))
+  }
+})
 
 ```
 
+Row
+-------------------------------------
+```{r}
+
+renderPlot({
+  if(input$cat_axis == "country") {
+    labels <- reports |>
+      filter(!is.na(country)) |>
+      group_by(country) |>
+      summarize(num = n()) |>
+      mutate(prop = num/sum(num), country = if_else(prop < 0.02, "Other", country)) |> 
+      group_by(country) |>
+      summarize(num = sum(num), prop = sum(prop), .groups = "drop")
+      
+    labels |>
+      mutate(country = fct_reorder(country, desc(prop))) |>
+      arrange(desc(country)) |> 
+      ggplot() +
+        geom_col(aes(x = "", y = prop, fill = .data[[input$cat_axis]]), width = 1, color = "black", size = .2) +
+        coord_polar(theta = "y") +
+        theme_void() +
+        scale_fill_viridis_d(option="D") +
+        labs(
+          title = "Proportions of Reports by Country",
+          fill = "Country"
+        )
+  }
+  else if(input$cat_axis == "sex") {
+    labels <- reports |>
+      filter(!is.na(.data[[input$cat_axis]])) |>
+      group_by(.data[[input$cat_axis]]) |>
+      summarize(num = n()) |>
+      mutate(prop = num/sum(num))
+      
+    labels |>
+      mutate(sex = fct_reorder(.data[[input$cat_axis]], desc(prop))) |>
+      arrange(desc(sex)) |> 
+      ggplot() +
+        geom_col(aes(x = "", y = prop, fill = .data[[input$cat_axis]]), width = 1, color = "black", size = .2) +
+        coord_polar(theta = "y") +
+        theme_void() +
+        scale_fill_viridis_d(option="D") +
+        labs(
+          title = ifelse(input$cat_axis == "sex", "Proportions of Reports by Sex", ifelse(input$cat_axis == "country", "Proportions of Reports by Country", "Proportions of Reports by Seriousness")),
+          fill = ifelse(input$cat_axis == "sex", "Sex", ifelse(input$cat_axis == "country", "Country", "Seriousness"))
+        )
+  }
+  else {
+    labels <- reports |>
+      filter(!is.na(.data[[input$cat_axis]])) |>
+      group_by(.data[[input$cat_axis]]) |>
+      summarize(num = n()) |>
+      mutate(prop = num/sum(num))
+      
+    labels |>
+      mutate(seriousness = fct_reorder(.data[[input$cat_axis]], desc(prop))) |>
+      arrange(desc(seriousness)) |> 
+      ggplot() +
+        geom_col(aes(x = "", y = prop, fill = .data[[input$cat_axis]]), width = 1, color = "black", size = .2) +
+        coord_polar(theta = "y") +
+        theme_void() +
+        scale_fill_viridis_d(option="D") +
+        labs(
+          title = ifelse(input$cat_axis == "sex", "Proportions of Reports by Sex", ifelse(input$cat_axis == "country", "Proportions of Reports by Country", "Proportions of Reports by Seriousness")),
+          fill = ifelse(input$cat_axis == "sex", "Sex", ifelse(input$cat_axis == "country", "Country", "Seriousness"))
+        )
+  }
+})
+
+```
 
 Reporters
 ==========================
@@ -241,7 +354,45 @@ renderPlot({
 ```
 
 
+Locations
+==========================
+### This interactive map that will show the number of reports that occur on each country when you click on a circle. 
 
+Row
+-------------------------------------
+```{r}
+library(leaflet)
+
+country_abs <- reports |> 
+  count(country)
+
+long_lat <- read.csv("~/DrugEffectsDahsboard/long_lat.csv")
+
+view(long_lat)
+
+view(country_abs)
+
+countries <- country_abs |>
+  full_join(long_lat, join_by(country == country_code)) |> 
+  select(country, country.y, longitude, latitude, n) |> 
+  filter(!is.na(n)) |> 
+  mutate(scaled_n = (log10(n) - min(log10(n))) / (max(log10(n)) - min(log10(n))) * (10 - 2) + 2) 
+
+leaflet() |> 
+  addTiles() |> 
+  setView(-30, 10, zoom = 2) |> 
+  addCircleMarkers(data = countries,
+    lat = ~ latitude, 
+    lng = ~ longitude, 
+    popup = ~ paste0("<b>Country: </b>", country.y, "    ", 
+                     "<br>",
+                         "<b>Reports: </b>", n, "    "),
+    radius = ~ scaled_n,  
+    # These last options describe how the circles look
+    weight = 2,
+    color = "red", 
+    fillColor = "yellow")
+```
 
 
 
