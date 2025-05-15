@@ -31,7 +31,6 @@ reports <- read.csv("reports.csv") |>
   overflow-y: hidden;
   margin-bottom: 5vh;
 }
-
 </style>
 
 About
@@ -172,7 +171,7 @@ renderPlot({
         geom_label(aes(x = 1.7, label = paste0(round(prop*100),"%"), y = cumprop - (prop/2)), size = 6) +
         coord_polar(theta = "y") +
         theme_void() +
-        scale_fill_viridis_d(option="D") +
+        scale_fill_viridis_d(option="rocket") +
         labs(
           title = "Reporter Qualification Proportions",
           fill = "Qualification"
@@ -188,8 +187,8 @@ renderPlot({
         !!input$color := fct_relevel(.data[[input$color]], "Serious", "Male")
       ) |>
       ggplot(aes(x = qualification, fill = .data[[input$color]])) +
-        geom_bar() +
-        scale_fill_viridis_d(option = "C", end = .5) +
+        geom_bar(position = "dodge") +
+        scale_fill_viridis_d(option = "inferno", end = .5) +
         labs(
           title = "Reporter Qualification Counts",
           x = "Qualification",
@@ -203,11 +202,8 @@ renderPlot({
 ```
 
 
-Reactions - Bar Chart
+Reactions
 ==========================
-
-Page 1: Inputs {.sidebar}
--------------------------
 ```{r, include=FALSE}
 reactions <- reports |>
     mutate(effects = str_split(effects, ";")) |>
@@ -226,42 +222,63 @@ drugnames <- str_to_upper(drugs200$drug)
   
 ```
 
+Column {.sidebar}
+----------------------------
+
 ```{r}
 inputPanel(
   div(
-    selectizeInput(
-      "reactions", 
-      "Add reactions:", 
-      choices = sort(unique(reactions$effect)), 
-      multiple = TRUE, 
-      selected = c("IRRITABILITY","DEPRESSION","FATIGUE"),
-      options = list(create = TRUE)
-    ),
-    selectInput("group", label = "Stratify By:", choices = c(
-      "None" = "none",
-      "Sex" = "sex",
-      "Seriousness" = "seriousness",
-      "Death" = "death"
-    )),
-    sliderInput(
-      "agerange", 
-      label = "Ages:",
-      min = 0, 
-      max = 120, 
-      value = c(0, 120), 
-      step = 1
-    ),
-    style = "display: flex; flex-direction: column;"
+        selectizeInput(
+          "reactions", 
+          "Add reactions:", 
+          choices = sort(unique(reactions$effect)), 
+          multiple = TRUE, 
+          selected = c("IRRITABILITY","DEPRESSION","FATIGUE"),
+          options = list(create = TRUE)
+        ),
+        selectInput("group", label = "Stratify By:", choices = c(
+          "None" = "none",
+          "Sex" = "sex",
+          "Seriousness" = "seriousness",
+          "Death" = "death"
+        )),
+        sliderInput(
+          "agerange", 
+          label = "Ages:",
+          min = 0, 
+          max = 120, 
+          value = c(0, 120), 
+          step = 1
+        ),
+      selectizeInput(
+          "drugs", 
+          "Add drug to wordcloud:", 
+          choices = sort(unique(drugnames)), 
+          multiple = TRUE,
+          options = list(create = TRUE)
+      ),
+      selectInput("wc_filter", label = "Limit wordcloud to:", choices = c(
+          "No Limit" = "None",
+          "Male" = "Male",
+          "Female" = "Female",
+          "Serious" = "Serious",
+          "Deaths" = "Dead"
+        ))
   )
 )
-```
 
-Row
---------------------------
+
+
+```
+Column {.tabset}
+--------------------------------
+
+### Bar Chart
 ```{r}
 renderPlot({
   req(input$reactions)
   req(input$group)
+  
   
   if (input$group == "none") {
     reactions |>
@@ -310,48 +327,27 @@ renderPlot({
 })
 ```
 
-Reactions - Wordcloud
-==========================
 
-Page 1: Inputs {.sidebar}
--------------------------
+### Word Cloud
 ```{r}
-inputPanel(
-  selectizeInput(
-      "drugs", 
-      "Add drug:", 
-      choices = sort(unique(drugnames)), 
-      multiple = TRUE,
-      options = list(create = TRUE)
-  ),
-  selectInput("wc_filter", label = "Limit to:", choices = c(
-      "No Limit" = "None",
-      "Male" = "Male",
-      "Female" = "Female",
-      "Serious" = "Serious",
-      "Deaths" = "Dead"
-    )),
-  sliderInput(
-      "wc_agerange", 
-      label = "Ages:",
-      min = 0, 
-      max = 120, 
-      value = c(0, 120), 
-      step = 1
-  )
-)
-```
+# demo with WARFARIN
 
-Row
---------------------------
-```{r}
-renderWordcloud2({
+uiOutput("wc_ui")
+
+
+
+output$wc_ui <- renderUI({
+  wordcloud2Output("wc_plot", width = "100%", height = "80px")
+})
+
+output$wc_plot <- renderWordcloud2({
   
+  req(input$wc_filter, input$agerange)
   if (length(input$drugs)==0) {
     reactions |>
       filter(
-        onset_age > input$wc_agerange[1] & 
-        onset_age < input$wc_agerange[2] & 
+        onset_age > input$agerange[1] & 
+        onset_age < input$agerange[2] & 
         (input$wc_filter == sex | 
         input$wc_filter == seriousness |
         input$wc_filter == death |
@@ -374,8 +370,8 @@ renderWordcloud2({
       mutate(effect = str_to_upper(effect)) |>
       # filter
       filter(
-        onset_age > input$wc_agerange[1] & 
-        onset_age < input$wc_agerange[2] & 
+        onset_age > input$agerange[1] & 
+        onset_age < input$agerange[2] & 
         (input$wc_filter == sex | 
         input$wc_filter == seriousness |
         input$wc_filter == death |
@@ -384,12 +380,15 @@ renderWordcloud2({
       # wordcloud
       mutate(tot = n()) |>
       group_by(effect) |>
-      summarize(freq = 10*n()/tot) |>
+      summarize(freq = n()) |>
       arrange(desc(freq)) |>
       slice_head(n = 200) |>
       wordcloud2(shape = "circle")
   }
 })
+
+
+
 ```
 
 
