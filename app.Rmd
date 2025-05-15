@@ -239,9 +239,9 @@ inputPanel(
     sliderInput(
       "daterange", 
       label = "Dates:",
-      min = as.Date("2015-01-01"), 
+      min = as.Date("2010-01-01"), 
       max = as.Date("2020-01-01"), 
-      value = c(as.Date("2015-01-01"), as.Date("2020-01-01")), 
+      value = c(as.Date("2010-01-01"), as.Date("2020-01-01")), 
       step = 1,
       timeFormat = "%Y-%m-%d"
     ),
@@ -544,9 +544,14 @@ leaflet() |>
     fillColor = "yellow")
 ```
 
+Conclusions
+=============================
+The FDA's drug effects dataset is vast and complex, with many different aspects to explore. Nonetheless, as we built this dashboard, we found a few interesting things from each graph that we wanted to highlight.  
+
+**Reports**
 
 
-
+**Reporters**
 
 
 
