@@ -510,7 +510,7 @@ Locations
 
 Row
 -------------------------------------
-```{r}
+```{r, fig.width = 10}
 library(leaflet)
 
 country_abs <- reports |> 
