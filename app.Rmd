@@ -93,7 +93,18 @@ Given that the United States pharmaceutical industry is driven by capital, healt
 
 Of course, the foci of the data are the effects themselves. We wanted to observe the quantities of each effect, as well as how these reactions are distributed across demographics and seriousness. Since the effects are numerous, we also wanted to create a visualization that captures a big-picture view of the situation.
 
+[Reporters]
+
+Another interesting area that this data allowed us to explore is the reporter. Who reports the drug effects could be an extremely interesting variable for further trend analysis. On the most basic level, we simply wanted to see who reports the most adverse events. But more than that, we wanted to see if there could be a correlation between certain effects and who reports them. For example, would lawyers report deaths more often than headaches? We wanted to create charts that would make this data easier to comprehend, and prompt conversations for further areas to analyze. 
+
+[Reactions]
+
+Given that each report included a list of patient reactions, we compiled all of them into one large data set to analyze for general trends. Which reactions are most common? Are certain reactions tied to certain drugs? How do reactions differ between different patient demographics? We created a few iteractive bar charts and wordclouds to help convey this information.  
+
 [Locations]
+
+Each report also included information about where the drug was taken. We wanted to see where the adverse effect reports were coming from, and find out which countries/regions contributed the most. To visualize this, we created an interactive map showing the number of reports from each country. 
+
 
 Reports
 ==========================
