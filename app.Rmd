@@ -46,6 +46,9 @@ Row
 ### The Dataset
 All of the data we used in this project was scraped from the FDA's public API; specifically, we used the adverse drug effects endpoint, which gives access to information about individual effect reports made by a variety of sources. In our initial collection of data, we separated each report into the various drugs that were included. Afterwards, we wrangled another dataset of reports, without individual drug information. After all this, we had access to the following variables.
 
+[API](https://open.fda.gov/apis/drug/event/)
+[Github](https://github.com/cmee123/DrugEffectsDahsboard)
+
 ```{r}
 library(knitr)
 fields <- data.frame(
@@ -517,7 +520,7 @@ output$wc_plot <- renderWordcloud2({
 
 Locations
 ==========================
-### This interactive map that will show the number of reports that occur on each country when you click on a circle. 
+### This interactive map will show the number of reports that occur on each country when you click on a circle. 
 
 Row
 -------------------------------------
