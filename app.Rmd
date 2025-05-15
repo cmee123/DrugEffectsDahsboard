@@ -451,7 +451,6 @@ renderPlot({
 })
 ```
 
-=======
 ### Word Cloud
 ```{r}
 # demo with WARFARIN
@@ -522,13 +521,13 @@ Locations
 
 Row
 -------------------------------------
-```{r}
+```{r, fig.width = 10}
 library(leaflet)
 
 country_abs <- reports |> 
   count(country)
 
-long_lat <- read.csv("~/DrugEffectsDahsboard/long_lat.csv")
+long_lat <- read.csv("long_lat.csv")
 
 view(long_lat)
 
