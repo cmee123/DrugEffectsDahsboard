@@ -1,0 +1,606 @@
+---
+title: "Adverse Drug Effects"
+runtime: shiny
+editor_options: 
+  chunk_output_type: console
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    theme: 
+      version: 4
+      bootswatch: simplex
+---
+
+```{r}
+# Libraries, data
+
+library(tidyverse)
+library(ggrepel)
+library(wordcloud2)
+drugs <- read.csv("drugs.csv")
+reports <- read.csv("reports.csv")
+
+```
+
+<style>
+.shiny-plot-output {
+  border: solid black 2px;
+  border-radius: 5px;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  margin-bottom: 5vh;
+}
+</style>
+
+About
+==========================
+
+### Adverse Drug Effects Dashboard
+Cathal Mee, Daniel Evans
+
+
+Row
+---------------------------
+
+### The Dataset
+All of the data we used in this project was scraped from the FDA's public API; specifically, we used the adverse drug effects endpoint, which gives access to information about individual effect reports made by a variety of sources. In our initial collection of data, we separated each report into the various drugs that were included. Afterwards, we wrangled another dataset of reports, without individual drug information. After all this, we had access to the following variables.
+
+```{r}
+# A table of all the variables
+
+library(knitr)
+fields <- data.frame(
+  Name = c(
+    "Date", "Reporter Qualifications", "Patient Onset Age", "Patient Sex",
+    "Patient Weight", "Patient Reaction", "Reporter Qualification", "Country",
+    "Drug Start Date", "Receive Date", "Time to Report", "Seriousness",
+    "Death date", "Death"
+  ),
+  Type = c(
+    "Numerical", "Categorical", "Numerical", "Categorical",
+    "Numerical", "Text", "Categorical", "Categorical",
+    "Date", "Date", "Numerical", "Categorical",
+    "Date", "Boolean"
+  ),
+  Description = c(
+    "The date that the report was submitted.",
+    "What entity made a report on behalf of a patient.",
+    "The age of the patient when the first effect occurred.",
+    "The sex of the patient.",
+    "The weight of the patient.",
+    "Text data that includes all reactions experienced by the patient.",
+    "The type of reporter; 1 = Physician, 2 = Pharmacist, 3 = Other health professional, 4 = Lawyer, 5 = Consumer or non-health professional.",
+    "The name of the country where the event occurred.",
+    "The date the patient began taking the drug.",
+    "The date the report was received.",
+    "To be calculated manually: the amount of time in between the drug start date and the date the report was received.",
+    "Whether or not the report was considered serious.",
+    "The date of death, if the patient died.",
+    "Whether or not the patient died."
+  )
+)
+
+kable(fields, format = "markdown", col.names = c("Name", "Type", "Description"))
+```
+
+
+
+### Objectives
+Given the interactive nature of this dashboard, our aim is not to answer any single question about adverse drug effects in the United States; rather, we hope that these illustrations will allow for true exploration of trends in the data. There are four primary contexts to this data that we wanted users to be able to explore: reports, reporters, reactions, and locations. 
+
+First of all, we wanted to capture general information about these reports, like when they are being made, and on behalf of what people. These general statistics help inform other interpretations, as well as create familiarity with the data.
+
+Given that the United States pharmaceutical industry is driven by capital, health care victims are often taken advantage of by big companies. These reports are one of the few ways that the producers of medications can be held accountable; thus, we thought it relevant to analyze the sources of these reports, to see how problems in the system are identified. Questions include what qualifications the people making these reports have, whether or not sex or seriousness play a factor in how effects get reported, and how these trends may differ across time.
+
+Of course, the foci of the data are the effects themselves. We wanted to observe the quantities of each effect, as well as how these reactions are distributed across demographics and seriousness. Since the effects are numerous, we also wanted to create a visualization that captures a big-picture view of the situation.
+
+Finally, we were interested in where the reports are coming from. Are there a significant number from international countries? What regions of the world are making the most reports? To answer these questions, we created an interactive proportional symbol map.
+
+More than anything, we developed this dashboard with the intent of giving users the ability to answer their own questions about adverse drug effects and reports. At the end, we give a few of our own findings, but we believe there is much more to observe in the plots we have created.
+
+Reports
+==========================
+
+Inputs {.sidebar}
+-------------------------
+```{r, echo=FALSE}
+# Inputs for reports
+inputPanel(
+  div(
+    selectInput("x_axis", label = "Numerical Variable:", choices = c(
+      "Date" = "receive_date",
+      "Age" = "onset_age"
+    )),
+    selectInput("cat_axis", label = "Categorical Variable:", choices = c(
+      "Sex" = "sex",
+      "Country" = "country",
+      "Seriousness" = "seriousness"
+    )),
+    style = "display: flex; flex-direction: column;"
+  )
+)
+```
+
+Row
+-------------------------------------
+```{r}
+# Plots for reports
+
+renderPlot({
+  
+  if (input$x_axis == "onset_age") {
+     reports |> 
+      filter(onset_age <= 110) |> 
+      ggplot(aes(x=onset_age)) +
+      geom_density(fill="#69b3a2", color="#69b3a2", alpha=0.3) +
+      labs(title = "Distribution of Reports Based on Age", y="Density", x="age")
+  }
+  else {
+     
+  reports |> 
+    mutate(receive_date = ymd(receive_date)) |> 
+    ggplot(aes(x=.data[[input$x_axis]])) +
+    geom_density(fill="#69b3a2", color="#69b3a2", alpha=0.3) +
+    labs(title = "Density of Reports Based on Date", y="Density", x=ifelse(input$x_axis == "onset_age", "Age", "Date"))
+  }
+})
+
+```
+
+Row
+-------------------------------------
+```{r}
+# OTher plots for reports
+renderPlot({
+  if(input$cat_axis == "country") {
+    labels <- reports |>
+      filter(!is.na(country)) |>
+      group_by(country) |>
+      summarize(num = n()) |>
+      mutate(prop = num/sum(num), country = if_else(prop < 0.02, "Other", country)) |> 
+      group_by(country) |>
+      summarize(num = sum(num), prop = sum(prop), .groups = "drop")
+      
+    labels |>
+      mutate(country = fct_reorder(country, desc(prop))) |>
+      arrange(desc(country)) |> 
+      ggplot() +
+        geom_col(aes(x = "", y = prop, fill = .data[[input$cat_axis]]), width = 1, color = "black", size = .2) +
+        coord_polar(theta = "y") +
+        theme_void() +
+        scale_fill_viridis_d(option="D") +
+        labs(
+          title = "Proportions of Reports by Country",
+          fill = "Country"
+        )
+  }
+  else if(input$cat_axis == "sex") {
+    labels <- reports |>
+      filter(!is.na(.data[[input$cat_axis]])) |>
+      group_by(.data[[input$cat_axis]]) |>
+      summarize(num = n()) |>
+      mutate(prop = num/sum(num))
+      
+    labels |>
+      mutate(sex = fct_reorder(.data[[input$cat_axis]], desc(prop))) |>
+      arrange(desc(sex)) |> 
+      ggplot() +
+        geom_col(aes(x = "", y = prop, fill = .data[[input$cat_axis]]), width = 1, color = "black", size = .2) +
+        coord_polar(theta = "y") +
+        theme_void() +
+        scale_fill_viridis_d(option="D") +
+        labs(
+          title = ifelse(input$cat_axis == "sex", "Proportions of Reports by Sex", ifelse(input$cat_axis == "country", "Proportions of Reports by Country", "Proportions of Reports by Seriousness")),
+          fill = ifelse(input$cat_axis == "sex", "Sex", ifelse(input$cat_axis == "country", "Country", "Seriousness"))
+        )
+  }
+  else {
+    labels <- reports |>
+      filter(!is.na(.data[[input$cat_axis]])) |>
+      group_by(.data[[input$cat_axis]]) |>
+      summarize(num = n()) |>
+      mutate(prop = num/sum(num))
+      
+    labels |>
+      mutate(seriousness = fct_reorder(.data[[input$cat_axis]], desc(prop))) |>
+      arrange(desc(seriousness)) |> 
+      ggplot() +
+        geom_col(aes(x = "", y = prop, fill = .data[[input$cat_axis]]), width = 1, color = "black", size = .2) +
+        coord_polar(theta = "y") +
+        theme_void() +
+        scale_fill_viridis_d(option="D") +
+        labs(
+          title = ifelse(input$cat_axis == "sex", "Proportions of Reports by Sex", ifelse(input$cat_axis == "country", "Proportions of Reports by Country", "Proportions of Reports by Seriousness")),
+          fill = ifelse(input$cat_axis == "sex", "Sex", ifelse(input$cat_axis == "country", "Country", "Seriousness"))
+        )
+  }
+})
+
+```
+
+Reporters
+==========================
+
+Inputs {.sidebar}
+-------------------------
+```{r, echo=FALSE}
+# Inputs for reporters
+inputPanel(
+  div(
+    # Selection to choose second cat variable
+    selectInput("color", label = "Color By:", choices = c(
+      "None" = "none",
+      "Sex" = "sex",
+      "Seriousness" = "seriousness",
+      "Death" = "death"
+    )),
+    # Selection to choose a filter
+    selectInput("limit", label = "Limit to:", choices = c(
+      "No Limit" = "None",
+      "Male" = "Male",
+      "Female" = "Female",
+      "Serious" = "Serious",
+      "Deaths" = "Dead"
+    )),
+    # Slider to filter by date
+    sliderInput(
+      "daterange", 
+      label = "Dates:",
+      min = as.Date("2010-01-01"), 
+      max = as.Date("2020-01-01"), 
+      value = c(as.Date("2010-01-01"), as.Date("2020-01-01")), 
+      step = 1,
+      timeFormat = "%Y-%m-%d"
+    ),
+    style = "display: flex; flex-direction: column;"
+  )
+)
+```
+
+Row
+-------------------------------------
+```{r}
+renderPlot({
+  req(input$color)
+  
+  # Prepare the filters ahead of time
+  filtered_reports <- reports |>
+    filter(
+      input$limit == sex | 
+      input$limit == seriousness |
+      input$limit == death |
+      input$limit == "None"
+    ) |>
+    filter(
+      as.Date(receive_date) >= input$daterange[1] &
+      as.Date(receive_date) <= input$daterange[2]
+    )
+  
+  # Pie chart
+  if (input$color == "none") {
+    # Create the labels for each qualification
+    labels <- filtered_reports |>
+      filter(!is.na(qualification)) |>
+      group_by(qualification) |>
+      summarize(num = n()) |>
+      mutate(prop = num/sum(num))
+      
+    # The labels include the proportions, so we start with that
+    labels |>
+      # Sort the qualifications for a better visual
+      mutate(qualification = fct_reorder(qualification, desc(prop))) |>
+      arrange(desc(qualification)) |>
+      mutate(cumprop = cumsum(prop)) |>
+      ggplot() +
+        geom_col(aes(x = "", y = prop, fill = qualification), width = 1, color = "black", size = .2) +
+        geom_label(aes(x = 1.7, label = paste0(round(prop*100),"%"), y = cumprop - (prop/2)), size = 6) +
+        coord_polar(theta = "y") +
+        theme_void() +
+        scale_fill_viridis_d(option="rocket") +
+        labs(
+          title = "Reporter Qualification Proportions",
+          fill = "Qualification"
+        )
+    
+  # Bar chart
+  } else {
+    filtered_reports |>
+      # Filter out NAs dynamically
+      filter(!is.na(qualification) & !is.na(.data[[input$color]])) |>
+      group_by(qualification) |>
+      mutate(n = n()) |>
+      ungroup() |>
+      
+      # This reorders all cat variables :)
+      mutate(
+        qualification = fct_reorder(qualification, desc(n)),
+        !!input$color := fct_relevel(.data[[input$color]], "Serious", "Male", "Dead")
+      ) |>
+      ggplot(aes(x = qualification, fill = .data[[input$color]])) +
+        geom_bar(position = "dodge") +
+        scale_fill_viridis_d(option = "inferno", end = .5) +
+        labs(
+          title = "Reporter Qualification Counts",
+          x = "Qualification",
+          y = "Count",
+          fill = str_to_title(input$color)
+        ) +
+        theme_minimal()
+  }
+  
+})
+```
+
+
+Reactions
+==========================
+```{r, include=FALSE}
+# Unnest all of the reactions
+reactions <- reports |>
+    mutate(effects = str_split(effects, ";")) |>
+    unnest(effects) |>
+    rename(effect = effects) |>
+    mutate(effect = str_to_upper(effect))
+
+# Limit users to inputting drugs with multiple reports
+drugs200 <- drugs |> 
+  mutate(drug = str_remove(drug, "\\.")) |>
+  group_by(drug) |>
+  summarize(n = n()) |>
+  arrange(desc(n)) |>
+  slice_head(n = 200)
+
+drugnames <- str_to_upper(drugs200$drug)
+  
+```
+
+Column {.sidebar}
+----------------------------
+
+```{r}
+inputPanel(
+  div(
+    # Input for different reactions, stored in reactions$effect vector
+    selectizeInput(
+      "reactions", 
+      "Add reactions:", 
+      choices = sort(unique(reactions$effect)), 
+      multiple = TRUE, 
+      selected = c("IRRITABILITY","DEPRESSION","FATIGUE"),
+      options = list(create = TRUE)
+    ),
+    selectInput("group", label = "Stratify By:", choices = c(
+      "None" = "none",
+      "Sex" = "sex",
+      "Seriousness" = "seriousness",
+      "Death" = "death"
+    )),
+    sliderInput(
+      "agerange", 
+      label = "Ages:",
+      min = 0, 
+      max = 120, 
+      value = c(0, 120), 
+      step = 1
+    ),
+    
+    # Wordcloud only inputs
+    # Selectize for drug names, stored in drugnames vector
+    selectizeInput(
+        "drugs", 
+        "Add drug to wordcloud:", 
+        choices = sort(unique(drugnames)), 
+        multiple = TRUE,
+        options = list(create = TRUE)
+    ),
+    selectInput("wc_filter", label = "Limit wordcloud to:", choices = c(
+        "No Limit" = "None",
+        "Male" = "Male",
+        "Female" = "Female",
+        "Serious" = "Serious",
+        "Deaths" = "Dead"
+      ))
+  )
+)
+
+
+
+```
+Column {.tabset}
+--------------------------------
+
+### Bar Chart
+```{r}
+renderPlot({
+  req(input$reactions)
+  req(input$group)
+  
+  
+  if (input$group == "none") {
+    # Only one categorical variable
+    reactions |>
+      # Apply filters
+      filter(
+        effect %in% str_to_upper(input$reactions) &
+        onset_age >= input$agerange[1] &
+        onset_age <= input$agerange[2]
+      ) |>
+      # Order categories
+      group_by(effect) |>
+      mutate(num = n()) |>
+      ungroup() |>
+      mutate(effect = fct_reorder(effect, num)) |>
+      ggplot(aes(x = effect)) +
+        geom_bar(fill = "black") +
+        labs(
+          title = "Drug Reactions",
+          x = "Reactions",
+          y = "Count"
+        ) +
+        theme_minimal()
+  } else {
+    # Two categorical variables
+    reactions |>
+      # Apply filters
+      filter(
+        effect %in% str_to_upper(input$reactions) &
+        !is.na(.data[[input$group]]) &
+        onset_age >= input$agerange[1] &
+        onset_age <= input$agerange[2]
+      ) |>
+      # Order categories
+      group_by(effect, .data[[input$group]]) |>
+      mutate(num = n()) |>
+      ungroup() |>
+      mutate(
+        effect = fct_reorder(effect, num),
+        !!input$group := fct_relevel(.data[[input$group]], "Serious", "Male")
+      ) |>
+      ggplot(aes(x = effect, fill = .data[[input$group]])) +
+        geom_bar(position = "dodge") +
+        scale_fill_viridis_d(option="F", end = .5) +
+        labs(
+          title = "Drug Reactions",
+          x = "Reactions",
+          y = "Count"
+        ) +
+        theme_minimal()
+  }
+})
+```
+
+### Word Cloud
+```{r}
+# demo with METHOTREXATE
+
+# This outputs the wordcloud. I found this workflow was more consistent.
+uiOutput("wc_ui")
+
+
+# UI step
+output$wc_ui <- renderUI({
+  wordcloud2Output("wc_plot", width = "100%", height = "80px")
+})
+
+
+# Server step
+output$wc_plot <- renderWordcloud2({
+  
+  req(input$wc_filter, input$agerange)
+  
+  
+  if (length(input$drugs)==0) {
+    # Before user selects a particular drug
+    reactions |>
+      # Apply filters
+      filter(
+        onset_age > input$agerange[1] & 
+        onset_age < input$agerange[2] & 
+        (input$wc_filter == sex | 
+        input$wc_filter == seriousness |
+        input$wc_filter == death |
+        input$wc_filter == "None")
+      ) |>
+      group_by(effect) |>
+      summarize(freq = n()) |>
+      arrange(desc(freq)) |>
+      slice_head(n = 200) |>
+      wordcloud2(shape = "circle")
+  } else {
+    # For user selected drugs
+    search <- str_c(input$drugs, collapse = "|")
+    
+    drugs |>
+      # filter and unnest reactions
+      filter(str_detect(drug, search)) |>
+      mutate(effects = str_split(effects, ";")) |>
+      unnest(effects) |>
+      rename(effect = effects) |>
+      mutate(effect = str_to_upper(effect)) |>
+      # filter
+      filter(
+        onset_age > input$agerange[1] & 
+        onset_age < input$agerange[2] & 
+        (input$wc_filter == sex | 
+        input$wc_filter == seriousness |
+        input$wc_filter == death |
+        input$wc_filter == "None")
+      ) |>
+      # wordcloud
+      mutate(tot = n()) |>
+      group_by(effect) |>
+      summarize(freq = n()) |>
+      arrange(desc(freq)) |>
+      slice_head(n = 200) |>
+      wordcloud2(shape = "circle")
+  }
+})
+
+
+
+```
+
+
+Locations
+==========================
+### This interactive map that will show the number of reports that occur on each country when you click on a circle. 
+
+Row
+-------------------------------------
+```{r, fig.width = 10}
+library(leaflet)
+
+country_abs <- reports |> 
+  count(country)
+
+long_lat <- read.csv("long_lat.csv")
+
+view(long_lat)
+
+view(country_abs)
+
+countries <- country_abs |>
+  full_join(long_lat, join_by(country == country_code)) |> 
+  select(country, country.y, longitude, latitude, n) |> 
+  filter(!is.na(n)) |> 
+  mutate(scaled_n = (log10(n) - min(log10(n))) / (max(log10(n)) - min(log10(n))) * (10 - 2) + 2) 
+
+leaflet() |> 
+  addTiles() |> 
+  setView(-30, 10, zoom = 2) |> 
+  addCircleMarkers(data = countries,
+    lat = ~ latitude, 
+    lng = ~ longitude, 
+    popup = ~ paste0("<b>Country: </b>", country.y, "    ", 
+                     "<br>",
+                         "<b>Reports: </b>", n, "    "),
+    radius = ~ scaled_n,  
+    # These last options describe how the circles look
+    weight = 2,
+    color = "red", 
+    fillColor = "yellow")
+```
+
+Conclusions
+=============================
+The FDA's drug effects dataset is vast and complex, with many different aspects to explore. Nonetheless, as we built this dashboard, we found a few interesting things from each graph that we wanted to highlight.  
+
+**Reports**
+A fairly uniform distribution over time suggests that the rate at which reports are made over the last ten years has remained the same. This is surprising given factors like increasing population, increase in the number of drugs being sold, and decrease in availability for a lot of medications. We also note that a large majority of the reports have been made on behalf of women as opposed to men, which is important for interpreting results in other contexts. This is likely due to a variety of factors, including higher life expectancy for women, and an abundance of female-oriented healthcare products like menstrual and contraception medication. Finally, a majority of the reports are deemed serious. 
+
+**Reporters**
+We already know that there are many more reports for women than for men, but switching between a female-filtered pie chart and a male-filtered one reveals that there is also a difference in the distributions of report sources across the two sexes. Approximately 51% of reports for women were made by non-health professionals or the consumers themselves, versus only 46% of men's reports, which are more often submitted by physicians, pharmacists, and other health professionals. This may suggest a bias in the industry towards men, that is, that health professionals are more likely to take the reactions of men seriously. On the other hand, filtering by death and examining the proportions of the two sexes shows that more of the reactions that ended in death were submitted for men in every category. This is particularly significant given how many more reports were made for women overall.
+
+**Reactions**
+There are so many different reactions that we can only give a few examples of ways these visualizations can be used. One comparison we made was oriented towards the reaction of depression and what could be said to be its worst predecessor, suicidal behavior. For example, when comparing suicidal threats, behavior, and ideation with completed suicides and depression, we see that there are for more completed suicides than any non-terminal suicidal category, which should reinforce our commitment to taking suicidal behavior seriously. Additionally, while more than twice as many of the depression reports were made on behalf of women as on behalf of men, the ratios are much closer for the suicidal categories. This also corroborates an agreed-upon conclusion in healthcare: that men are less likely to access mental health resources early and are more likely to commit suicide later.
+
+**Locations**
+Unsurprisingly, the United States, Western Europe, and their allies make the most drug reports. These imperial core countries have the most access to medications and the most means to report problems with them. However, this should not contribute to deficit thinking; instead, it is important to consider how a lack of access to regulating systems can make countries vulnerable to being taken advantage of by big pharmaceutical companies.
+
+-----
+
+All in all, we believe this dataset is important to explore. The bottom line is that most estimates put the pharmaceutical market in 2024 well over a trillion dollars, while various disparities in sex and other socio-economic factors create inequality across access to treatment. The visualizations that we have developed in four different aspects of the data make it possible to see trends on many scales, from individual drugs or effects to demographic factors, as well as their interactions. 
+
+Source
+================
+The source code for this project can be accessed <a href="https://github.com/cmee123/DrugEffectsDahsboard">here</a>.
